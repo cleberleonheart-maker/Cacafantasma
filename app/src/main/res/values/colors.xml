@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="bg">#0B0620</color>
+    <color name="bg_deep">#060310</color>
+    <color name="panel">#17103A</color>
+    <color name="panel_border">#3A2E6B</color>
+    <color name="accent">#9B6BFF</color>
+    <color name="accent_dark">#6C3FD8</color>
+    <color name="glow">#7FE8FF</color>
+    <color name="text_primary">#F2EFFF</color>
+    <color name="text_secondary">#B9AEDA</color>
+    <color name="text_muted">#7A6FA3</color>
+    <color name="success">#4ADE80</color>
+    <color name="danger">#F87171</color>
+    <color name="gold">#FACC15</color>
+</resources>
