@@ -3,9 +3,11 @@ package com.caca.fantasma.ui
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
+import android.text.InputType
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
@@ -16,6 +18,7 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import com.caca.fantasma.R
 import com.caca.fantasma.game.Achievement
+import com.caca.fantasma.game.Auth
 import com.caca.fantasma.game.Consumable
 import com.caca.fantasma.game.Equip
 import com.caca.fantasma.game.GameData
@@ -27,6 +30,7 @@ import kotlin.random.Random
 class MainActivity : AppCompatActivity() {
 
     private lateinit var player: Player
+    private lateinit var auth: Auth
     private lateinit var column: LinearLayout
     private lateinit var snd: SoundManager
 
@@ -51,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         player = Player(this)
+        auth = Auth(this)
         snd = SoundManager(this)
         column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -62,7 +67,7 @@ class MainActivity : AppCompatActivity() {
             addView(column, LinearLayout.LayoutParams(MATCH, WRAP))
         }
         setContentView(scroll)
-        showScreen("menu")
+        showScreen(if (auth.hasAccount()) "login" else "register")
     }
 
     override fun onDestroy() {
@@ -81,6 +86,8 @@ class MainActivity : AppCompatActivity() {
             "hunt" -> renderHunt()
             "trophies" -> renderTrophies()
             "achievements" -> renderAchievements()
+            "login" -> renderLogin()
+            "register" -> renderRegister()
             else -> renderMenu()
         }
         column.alpha = 0f
@@ -110,6 +117,23 @@ class MainActivity : AppCompatActivity() {
 
     private fun spacer(h: Int) {
         column.addView(View(this), LinearLayout.LayoutParams(MATCH, dp(h)))
+    }
+
+    private fun field(hint: String, password: Boolean = false, prefill: String = "", minLines: Int = 1): EditText {
+        val et = EditText(this)
+        et.hint = hint
+        et.setTextColor(color(R.color.text_primary))
+        et.setHintTextColor(color(R.color.text_muted))
+        et.setTextSize(16f)
+        et.typeface = fontBody()
+        et.setBackgroundResource(R.drawable.bg_panel)
+        et.setPadding(dp(14), dp(12), dp(14), dp(12))
+        et.minLines = minLines
+        et.textSize = 16f
+        if (password) et.inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
+        if (prefill.isNotEmpty()) et.setText(prefill)
+        column.addView(et, LinearLayout.LayoutParams(MATCH, dp(52)).apply { topMargin = dp(10) })
+        return et
     }
 
     private fun Label(txt: String, n: Int = 16, c: Int = R.color.text_primary, f: Typeface? = null, center: Boolean = false): TextView {
@@ -215,6 +239,80 @@ class MainActivity : AppCompatActivity() {
         return bar
     }
 
+    // ---------- login / register ----------
+
+    private fun renderRegister() {
+        spacer(24)
+        val art = Label("▓▒░ CAÇA FANTASMA ░▒▓", 30, R.color.glow, fontDisplay(), center = true)
+        column.addView(art)
+        spacer(6)
+        column.addView(Label("Crie seu caçador para guardar o progresso neste aparelho.", 14, R.color.text_secondary, fontBody(), center = true))
+        spacer(18)
+        column.addView(Label("Nome do caçador", 14, R.color.text_secondary, fontMedium()))
+        val user = field("ex.: João Caçador")
+        column.addView(Label("Senha (mínimo 4 caracteres)", 14, R.color.text_secondary, fontMedium()))
+        val pass = field("senha secreta", password = true)
+        val conf = field("repita a senha", password = true)
+        spacer(10)
+        addButton(glowButton("Criar conta e jogar") {
+            val u = user.text.toString().trim()
+            val p = pass.text.toString()
+            val c = conf.text.toString()
+            when {
+                u.isEmpty() -> Toast.makeText(this, "Escolha um nome para o caçador", Toast.LENGTH_SHORT).show()
+                u.length < 3 -> Toast.makeText(this, "O nome precisa de ao menos 3 letras", Toast.LENGTH_SHORT).show()
+                p.length < 4 -> Toast.makeText(this, "A senha precisa de ao menos 4 caracteres", Toast.LENGTH_SHORT).show()
+                p != c -> Toast.makeText(this, "As senhas não conferem", Toast.LENGTH_SHORT).show()
+                else -> {
+                    auth.register(u, p)
+                    snd.unlock()
+                    Toast.makeText(this, "Conta criada. Boa caçada, ${u}!", Toast.LENGTH_LONG).show()
+                    showScreen("menu")
+                }
+            }
+        })
+    }
+
+    private fun renderLogin() {
+        spacer(24)
+        val art = Label("▓▒░ CAÇA FANTASMA ░▒▓", 30, R.color.glow, fontDisplay(), center = true)
+        column.addView(art)
+        spacer(6)
+        column.addView(Label("Entre para continuar sua caçada.", 14, R.color.text_secondary, fontBody(), center = true))
+        spacer(18)
+        column.addView(Label("Nome do caçador", 14, R.color.text_secondary, fontMedium()))
+        val user = field("seu nome", prefill = auth.username())
+        column.addView(Label("Senha", 14, R.color.text_secondary, fontMedium()))
+        val pass = field("sua senha", password = true)
+        spacer(10)
+        addButton(glowButton("Entrar") {
+            val u = user.text.toString().trim()
+            val p = pass.text.toString()
+            if (auth.login(u, p)) {
+                snd.unlock()
+                showScreen("menu")
+            } else {
+                snd.defeat()
+                Toast.makeText(this, "Usuário ou senha incorretos", Toast.LENGTH_SHORT).show()
+            }
+        })
+        spacer(16)
+        val forgot = Label("Apagar conta e começar de novo", 13, R.color.text_muted, fontBody(), center = true)
+        column.addView(forgot, LinearLayout.LayoutParams(MATCH, WRAP))
+        forgot.setOnClickListener {
+            AlertDialog.Builder(this)
+                .setTitle("Apagar tudo?")
+                .setMessage("Sua conta, progresso, dinheiro e equipamento serão perdidos para sempre.")
+                .setPositiveButton("Apagar tudo") { _, _ ->
+                    auth.wipe()
+                    player.reset()
+                    showScreen("register")
+                }
+                .setNegativeButton("Cancelar", null)
+                .show()
+        }
+    }
+
     // ---------- menu ----------
 
     private fun renderMenu() {
@@ -234,6 +332,7 @@ class MainActivity : AppCompatActivity() {
         addButton(ghostButton("Sala de Troféus") { showScreen("trophies") }, 10)
         addButton(ghostButton("Conquistas") { showScreen("achievements") }, 10)
         addButton(ghostButton("Como jogar") { showScreen("help") }, 10)
+        addButton(ghostButton("Sair da conta") { showScreen("login") }, 10)
         addButton(ghostButton("Zerar progresso") {
             AlertDialog.Builder(this)
                 .setTitle("Reiniciar caçada?")
