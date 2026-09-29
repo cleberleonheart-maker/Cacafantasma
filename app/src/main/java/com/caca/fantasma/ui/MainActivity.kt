@@ -98,8 +98,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun showScreen(s: String) {
         screen = s
+        refresh()
+        column.alpha = 0f
+        column.translationY = dp(14).toFloat()
+        column.animate().alpha(1f).translationY(0f).setDuration(300).start()
+    }
+
+    private fun refresh() {
         column.removeAllViews()
-        when (s) {
+        when (screen) {
             "menu" -> renderMenu()
             "scenarios" -> renderScenarios()
             "shop" -> renderShop()
@@ -113,9 +120,6 @@ class MainActivity : AppCompatActivity() {
             "register" -> renderRegister()
             else -> renderMenu()
         }
-        column.alpha = 0f
-        column.translationY = dp(14).toFloat()
-        column.animate().alpha(1f).translationY(0f).setDuration(300).start()
     }
 
     // ---------- helpers ----------
@@ -483,7 +487,12 @@ class MainActivity : AppCompatActivity() {
                 p.length < 4 -> Toast.makeText(this, "A senha precisa de ao menos 4 caracteres", Toast.LENGTH_SHORT).show()
                 p != c -> Toast.makeText(this, "As senhas não conferem", Toast.LENGTH_SHORT).show()
                 else -> {
-                    auth.register(u, p)
+                    if (!auth.register(u, p)) {
+                        Toast.makeText(this, "Já existe uma conta neste aparelho", Toast.LENGTH_SHORT).show()
+                        return@glowButton
+                    }
+                    player.reset()
+                    player.grantStarterKit()
                     snd.unlock()
                     Toast.makeText(this, "Conta criada. Boa caçada, ${u}!", Toast.LENGTH_LONG).show()
                     showScreen("menu")
@@ -642,7 +651,7 @@ class MainActivity : AppCompatActivity() {
                         snd.coin()
                         Toast.makeText(this, "${e.name} ${if (level == 0) "adquirido" else "melhorado"}!", Toast.LENGTH_SHORT).show()
                         checkAchievements(null, false)
-                        renderShop()
+                        refresh()
                     } else {
                         Toast.makeText(this, "Dinheiro insuficiente", Toast.LENGTH_SHORT).show()
                     }
@@ -675,7 +684,7 @@ class MainActivity : AppCompatActivity() {
                     player.addItem(c.id, 1)
                     snd.coin()
                     checkAchievements(null, false)
-                    renderShop()
+                    refresh()
                 } else {
                     Toast.makeText(this, "Dinheiro insuficiente", Toast.LENGTH_SHORT).show()
                 }
@@ -879,7 +888,7 @@ class MainActivity : AppCompatActivity() {
                     }
                     huntEquipped.add(e.id)
                 }
-                renderHunt()
+                refresh()
             }
             if (selected) {
                 b.setBackgroundResource(R.drawable.bg_btn_accent)
@@ -915,7 +924,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 )) {
                     if (!active) activateItem(c) else Toast.makeText(this, "Já ativo nesta caçada", Toast.LENGTH_SHORT).show()
-                    renderHunt()
+                    refresh()
                 }
                 if (active) {
                     b.setBackgroundResource(R.drawable.bg_btn_accent)
@@ -935,7 +944,7 @@ class MainActivity : AppCompatActivity() {
             }
             huntPhase = "round"
             huntRound = 0
-            renderHunt()
+            refresh()
         }, 14)
         addButton(ghostButton("Voltar") { showScreen("scenarios") })
     }
@@ -945,7 +954,7 @@ class MainActivity : AppCompatActivity() {
     private fun renderRound(sc: Scenario) {
         val round = sc.rounds.getOrNull(huntRound) ?: run {
             huntPhase = "confront"
-            renderHunt()
+            refresh()
             return
         }
         column.addView(Label("Investigação  ${huntRound + 1} de ${sc.rounds.size}", 20, R.color.text_primary, fontDisplay()))
@@ -1006,12 +1015,12 @@ class MainActivity : AppCompatActivity() {
     private fun nextRound() {
         if (huntRound + 1 < huntScenario!!.rounds.size) {
             huntRound++
-            renderHunt()
+            refresh()
         } else {
             combatEquip = null
             combatTiming = ""
             huntPhase = "confront"
-            renderHunt()
+            refresh()
         }
     }
 
@@ -1043,7 +1052,7 @@ class MainActivity : AppCompatActivity() {
             addButton(glowButton("Usar ${e.name}  (Nv ${player.levelOf(e.id)})") {
                 combatEquip = e
                 huntPhase = "timing"
-                renderHunt()
+                refresh()
             }, 8)
         }
         if (huntEquipped.isEmpty()) {
@@ -1052,7 +1061,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderTiming(sc: Scenario) {
-        val e = combatEquip ?: return run { huntPhase = "confront"; renderHunt() }
+        val e = combatEquip ?: return run { huntPhase = "confront"; refresh() }
         column.addView(Label("O MOMENTO DO GOLPE", 20, R.color.danger, fontDisplay()))
         column.addView(Label("${e.name} na mão. Escolha como golpear.", 15, R.color.text_primary, fontBody()))
         spacer(2)
@@ -1070,7 +1079,7 @@ class MainActivity : AppCompatActivity() {
             val d = Label(desc, 13, R.color.text_muted, fontBody(), center = true)
             column.addView(d)
         }
-        addButton(ghostButton("Recuar") { huntPhase = "confront"; combatEquip = null; renderHunt() }, 12)
+        addButton(ghostButton("Recuar") { huntPhase = "confront"; combatEquip = null; refresh() }, 12)
     }
 
     private fun doConfront(sc: Scenario, e: Equip, timing: String) {
@@ -1120,7 +1129,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         huntPhase = "result"
-        renderHunt()
+        refresh()
     }
 
     private fun renderResult(sc: Scenario) {
