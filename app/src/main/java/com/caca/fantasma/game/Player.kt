@@ -94,14 +94,13 @@ class Player(context: Context) {
 
     fun grantStarterKit() {
         prefs.edit().apply {
-            putInt("money", maxOf(money, 300))
-            putInt("lv_uv", maxOf(levelOf("uv"), 1))
+            putInt("money", maxOf(money, GameData.STARTER_MONEY))
+            putInt("lv_${GameData.STARTER_EQUIP}", maxOf(levelOf(GameData.STARTER_EQUIP), 1))
         }.apply()
     }
 
     fun ensureStarterKit() {
-        val ownsNothing = GameData.EQUIP.none { levelOf(it.id) > 0 }
-        if (ownsNothing) grantStarterKit()
+        if (GameData.EQUIP.none { owns(it.id) }) grantStarterKit()
     }
 
     fun backupJson(): JSONObject = JSONObject().apply {

@@ -107,6 +107,11 @@ class MainActivity : AppCompatActivity() {
 
     private fun color(id: Int): Int = ContextCompat.getColor(this, id)
 
+    private fun starterKitDesc(): String {
+        val equip = GameData.equipById(GameData.STARTER_EQUIP)?.name ?: "um equipamento"
+        return "R\$${GameData.STARTER_MONEY} e uma $equip"
+    }
+
     private fun TextView.style(n: Int, c: Int, f: Typeface) {
         textSize = n.toFloat()
         setTextColor(c)
@@ -265,7 +270,6 @@ class MainActivity : AppCompatActivity() {
                 p != c -> Toast.makeText(this, "As senhas não conferem", Toast.LENGTH_SHORT).show()
                 else -> {
                     auth.register(u, p)
-                    player.grantStarterKit()
                     snd.unlock()
                     Toast.makeText(this, "Conta criada. Boa caçada, ${u}!", Toast.LENGTH_LONG).show()
                     showScreen("menu")
@@ -303,11 +307,10 @@ class MainActivity : AppCompatActivity() {
         forgot.setOnClickListener {
             AlertDialog.Builder(this)
                 .setTitle("Apagar tudo?")
-                .setMessage("Sua conta, progresso, dinheiro e equipamento serão perdidos para sempre.")
+                .setMessage("Sua conta e todo o progresso serão perdidos. A nova conta começa com ${starterKitDesc()}.")
                 .setPositiveButton("Apagar tudo") { _, _ ->
                     auth.wipe()
                     player.reset()
-                    player.grantStarterKit()
                     showScreen("register")
                 }
                 .setNegativeButton("Cancelar", null)
@@ -339,8 +342,8 @@ class MainActivity : AppCompatActivity() {
         addButton(ghostButton("Zerar progresso") {
             AlertDialog.Builder(this)
                 .setTitle("Reiniciar caçada?")
-                .setMessage("Todo o progresso, dinheiro e equipamento serão perdidos.")
-                .setPositiveButton("Sim, zerar") { _, _ -> player.reset(); player.grantStarterKit(); showScreen("menu") }
+                .setMessage("Todo o progresso, dinheiro e equipamento serão perdidos. A caçada recomeça com ${starterKitDesc()}.")
+                .setPositiveButton("Sim, zerar") { _, _ -> player.reset(); showScreen("menu") }
                 .setNegativeButton("Cancelar", null)
                 .show()
         }, 24)

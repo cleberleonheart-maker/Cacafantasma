@@ -216,6 +216,9 @@ object GameData {
         )
     )
 
+    const val STARTER_MONEY = 300
+    const val STARTER_EQUIP = "uv"
+
     fun rankFor(total: Int): Rank =
         RANKS.lastOrNull { total >= it.min } ?: RANKS.first()
 
