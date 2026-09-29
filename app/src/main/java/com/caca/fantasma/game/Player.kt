@@ -92,6 +92,18 @@ class Player(context: Context) {
 
     fun equipUnlocked(e: Equip): Boolean = e.unlockAfter < 0 || maxUnlocked > e.unlockAfter
 
+    fun grantStarterKit() {
+        prefs.edit().apply {
+            putInt("money", maxOf(money, 300))
+            putInt("lv_uv", maxOf(levelOf("uv"), 1))
+        }.apply()
+    }
+
+    fun ensureStarterKit() {
+        val ownsNothing = GameData.EQUIP.none { levelOf(it.id) > 0 }
+        if (ownsNothing) grantStarterKit()
+    }
+
     fun backupJson(): JSONObject = JSONObject().apply {
         put("money", money)
         put("max_unlocked", maxUnlocked)

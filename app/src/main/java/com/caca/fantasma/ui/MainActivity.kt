@@ -265,6 +265,7 @@ class MainActivity : AppCompatActivity() {
                 p != c -> Toast.makeText(this, "As senhas não conferem", Toast.LENGTH_SHORT).show()
                 else -> {
                     auth.register(u, p)
+                    player.grantStarterKit()
                     snd.unlock()
                     Toast.makeText(this, "Conta criada. Boa caçada, ${u}!", Toast.LENGTH_LONG).show()
                     showScreen("menu")
@@ -306,6 +307,7 @@ class MainActivity : AppCompatActivity() {
                 .setPositiveButton("Apagar tudo") { _, _ ->
                     auth.wipe()
                     player.reset()
+                    player.grantStarterKit()
                     showScreen("register")
                 }
                 .setNegativeButton("Cancelar", null)
@@ -316,6 +318,7 @@ class MainActivity : AppCompatActivity() {
     // ---------- menu ----------
 
     private fun renderMenu() {
+        player.ensureStarterKit()
         header(back = false)
         spacer(10)
         val art = Label("▓▒░ CAÇA FANTASMA ░▒▓", 34, R.color.glow, fontDisplay(), center = true)
@@ -337,7 +340,7 @@ class MainActivity : AppCompatActivity() {
             AlertDialog.Builder(this)
                 .setTitle("Reiniciar caçada?")
                 .setMessage("Todo o progresso, dinheiro e equipamento serão perdidos.")
-                .setPositiveButton("Sim, zerar") { _, _ -> player.reset(); showScreen("menu") }
+                .setPositiveButton("Sim, zerar") { _, _ -> player.reset(); player.grantStarterKit(); showScreen("menu") }
                 .setNegativeButton("Cancelar", null)
                 .show()
         }, 24)
@@ -617,7 +620,13 @@ class MainActivity : AppCompatActivity() {
             addButton(b, 6)
         }
         if (huntEquipped.isEmpty()) {
-            pill("Escolha pelo menos um equipamento", R.color.text_muted)
+            pill(
+                if (GameData.EQUIP.none { player.owns(it.id) })
+                    "Sem equipamento — compre na loja para poder caçar"
+                else
+                    "Escolha pelo menos um equipamento",
+                R.color.text_muted
+            )
         }
 
         spacer(8)
