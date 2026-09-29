@@ -60,6 +60,7 @@ class MainActivity : AppCompatActivity() {
     private var huntPhase = "prep"
     private var huntResult = ""
     private var beatBossJustNow = false
+    private var seenCompanions = -1
 
     private var combatEquip: Equip? = null
     private var combatTiming = ""
@@ -545,6 +546,12 @@ class MainActivity : AppCompatActivity() {
         spacer(12)
         pill("Posto: ${player.rank()}  ·  ${player.totalCaptures} fantasmas presos   ·  R\$${player.money}")
         pill("Bônus de posto: +${(player.rankData().rewardBonus * 100).toInt()}% prêmio  ·  -${player.rankData().shopDiscount}% na loja", R.color.accent)
+        announceCompanions()
+        val team = player.unlockedAllies()
+        if (team.isNotEmpty()) {
+            pill("Equipe: ${team.joinToString(", ") { it.name }}", R.color.gold)
+        }
+        companionHint()?.let { pill(it, R.color.text_muted) }
         if (player.bossCaptured()) {
             pill("✦ A caçada foi concluída — o castelo é seu", R.color.gold)
         }
@@ -812,11 +819,49 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- companions ----------
+
+    private fun renderCompanionPanel() {
+        val active = player.unlockedAllies()
+        if (active.isEmpty()) return
+        val body = StringBuilder()
+        active.forEachIndexed { i, c ->
+            if (i > 0) body.append("\n")
+            body.append(c.name).append(" — ").append(c.desc)
+        }
+        val p = panel()
+        p.addView(Label("Acompanhando você", 15, R.color.gold, fontMedium()))
+        p.addView(
+            Label(body.toString(), 13, R.color.text_secondary, fontBody()),
+            LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(3) }
+        )
+        addPanel(p, marginTop = 6)
+    }
+
+    private fun announceCompanions() {
+        val count = player.unlockedAllies().size
+        if (seenCompanions >= 0 && count > seenCompanions) {
+            player.unlockedAllies().take(count - seenCompanions).forEach {
+                snd.unlock()
+                Toast.makeText(this, "${it.name} entrou na caçada — ${it.role}.", Toast.LENGTH_LONG).show()
+            }
+        }
+        seenCompanions = count
+    }
+
+    private fun companionHint(): String? {
+        val next = player.nextAlly() ?: return null
+        val falta = next.unlockAtCaptures - player.totalCaptures
+        return "Faltam $falta captura(s) para ${next.name} entrar na caçada"
+    }
+
     private fun renderPrep(sc: Scenario) {
         column.addView(Label(if (sc.isBoss) "A GRANDE CAÇADA" else "Preparação", 20, R.color.text_primary, fontDisplay()))
         column.addView(Label(sc.name, 16, R.color.accent, fontDisplay()))
         column.addView(Label(sc.local, 13, R.color.text_muted, fontBody()))
         spacer(4)
+        announceCompanions()
+        renderCompanionPanel()
         val p = panel()
         p.addView(Label(sc.intro, 15, R.color.text_secondary, fontBody()))
         addPanel(p)
@@ -923,15 +968,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun doRound(sc: Scenario, e: Equip) {
         val round = sc.rounds.getOrNull(huntRound) ?: return nextRound()
-        var found = huntIntuition || (round.ideal == e.id && Random.nextFloat() < hitChance(e))
+        val mirela = huntRound == 0 && player.hasAlly("mirela")
+        var found = huntIntuition || mirela ||
+            (round.ideal == e.id && Random.nextFloat() < hitChance(e))
         if (found) {
             huntEvidence++
             huntTips += sc.clueTip
             player.money = player.money + sc.clueTip
-            huntResult = if (huntIntuition && round.ideal != e.id)
-                "PILHA REVELADORA — você sentiu a pista exata!  (+R\$${sc.clueTip})"
-            else
-                "PISTA ENCONTRADA — " + round.hit + "  (+R\$${sc.clueTip} de achado)"
+            huntResult = when {
+                mirela && round.ideal != e.id ->
+                    "DONA MIRELA — ela murmurou o caminho antes de você varredura.  (+R\$${sc.clueTip})"
+                huntIntuition && round.ideal != e.id ->
+                    "PILHA REVELADORA — você sentiu a pista exata!  (+R\$${sc.clueTip})"
+                else ->
+                    "PISTA ENCONTRADA — " + round.hit + "  (+R\$${sc.clueTip} de achado)"
+            }
             snd.clue()
         } else {
             huntHp = (huntHp - 12).coerceAtLeast(10)
@@ -968,25 +1019,23 @@ class MainActivity : AppCompatActivity() {
         1, 2 -> 1
         3, 4 -> 2
         5, 6 -> 3
-        else -> 4
+        7, 8 -> 4
+        else -> 5
     }
 
     private fun catchChance(sc: Scenario, e: Equip, timing: String): Float {
         val lv = player.levelOf(e.id)
-        var c = 0.28f + 0.09f * effectiveEvidence().coerceAtMost(sc.rounds.size)
-        when (e.id) {
-            "trap" -> c += 0.22f
-            "salt" -> c += 0.10f
-            "cross" -> c += 0.05f
+        var c = GameData.baseChance(sc.diff)
+        c += GameData.evidenceBonus(effectiveEvidence(), needEvidence(sc))
+        c += GameData.equipBonus(e.id)
+        c += GameData.LEVEL_STEP * (lv - 1)
+        if (huntHp < 40) c -= GameData.COWARD_PENALTY
+        c += when (timing) {
+            "frente" -> GameData.TIMING_FRONT
+            "ritual" -> GameData.TIMING_RITUAL
+            else -> GameData.TIMING_BONUS
         }
-        c += 0.05f * (lv - 1)
-        if (huntHp < 40) c -= 0.10f
-        when (timing) {
-            "sinal" -> c += 0.05f
-            "frente" -> c += 0.15f
-            "ritual" -> c -= 0.10f
-        }
-        return c.coerceIn(0.05f, 0.95f)
+        return c.coerceIn(GameData.CHANCE_FLOOR, GameData.CHANCE_CAP)
     }
 
     private fun renderConfront(sc: Scenario) {
@@ -1074,9 +1123,12 @@ class MainActivity : AppCompatActivity() {
                 huntResult = "ESCAPOU — ${sc.defeat}\n\nO Crucifixo/Amuleto te protegeu: você ficou com os achados (+R\$$huntTips)."
                 snd.hurt()
             } else {
-                player.money = player.money - huntTips
-                huntResult = "DERROTA — ${sc.defeat}\n\nO fantasma te aterrorizou e você perdeu os achados (-R\$$huntTips)."
+                val halved = player.hasAlly("baltazar")
+                val loss = if (halved) (huntTips / 2) else huntTips
+                player.money = player.money - loss
+                huntResult = "DERROTA — ${sc.defeat}\n\nO fantasma te aterrorizou e você perdeu os achados (-R\$$loss)."
                 if (timing == "frente") huntResult += "\nArriscar demais anulou todas as proteções."
+                if (halved) huntResult += "\nSeu Baltazar agarrou seu braço e salvou metade dos bolsos."
                 snd.defeat()
             }
         }

@@ -45,6 +45,15 @@ data class Achievement(
     val reward: Int
 )
 
+data class Ally(
+    val id: String,
+    val name: String,
+    val role: String,
+    val desc: String,
+    val unlockAtCaptures: Int,
+    val effect: String
+)
+
 data class Rank(
     val name: String,
     val min: Int,
@@ -88,6 +97,21 @@ object GameData {
         Achievement("collector", "Colecionador", "Capture todos os cenários, incluindo o chefe.", 1500),
         Achievement("boss", "Caçador de Chefes", "Capture o chefe final.", 2000),
         Achievement("spender", "Grande Investidor", "Gaste R$2.000 na loja.", 250)
+    )
+
+    // Entram com o tempo, conforme o caçador ganha experiencia. Não são
+    // equipáveis nem compráveis: acompanham o caçador por conta própria.
+    val ALLIES: List<Ally> = listOf(
+        Ally(
+            "mirela", "Dona Mirela", "Médium do bairro",
+            "A primeira vistoria de cada caçada sempre acha pista, mesmo com o equipamento errado.",
+            3, "first_sighting"
+        ),
+        Ally(
+            "baltazar", "Seu Baltazar", "Ex-exorcista",
+            "Perde só metade do dinheiro numa derrota. Ele segura o braço do caçador.",
+            8, "halve_loss"
+        )
     )
 
     val SCENARIOS: List<Scenario> = listOf(
@@ -218,6 +242,31 @@ object GameData {
 
     const val STARTER_MONEY = 300
     const val STARTER_EQUIP = "uv"
+
+    // Dificuldade real. Antes o 'diff' dos cenarios era so enfeite: a chance
+    // de captura nao olhava para ele, entao o chefe era tao facil quanto o
+    // primeiro cenario. Estes numeros dao a curva que faltava.
+    const val DIFF_BASE_CHANCE = 0.46f
+    const val DIFF_BASE_STEP = 0.028f
+    const val EVIDENCE_STEP = 0.07f
+    const val TIMING_BONUS = 0.05f
+    const val TIMING_FRONT = 0.15f
+    const val TIMING_RITUAL = -0.10f
+    const val COWARD_PENALTY = 0.10f
+    const val LEVEL_STEP = 0.05f
+    const val CHANCE_FLOOR = 0.05f
+    const val CHANCE_CAP = 0.95f
+
+    fun baseChance(diff: Int): Float = DIFF_BASE_CHANCE - DIFF_BASE_STEP * (diff - 1).coerceAtLeast(0)
+
+    fun evidenceBonus(have: Int, needed: Int): Float = EVIDENCE_STEP * (have - needed)
+
+    fun equipBonus(equipId: String): Float = when (equipId) {
+        "trap" -> 0.22f
+        "salt" -> 0.10f
+        "cross" -> 0.05f
+        else -> 0f
+    }
 
     const val ENDING_TITLE = "CAÇADA CONCLUÍDA"
 

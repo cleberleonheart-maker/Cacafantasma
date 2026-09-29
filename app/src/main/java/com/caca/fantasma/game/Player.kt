@@ -76,6 +76,15 @@ class Player(context: Context) {
 
     fun achievementsUnlocked(): Int = GameData.ACHIEVEMENTS.count { achUnlocked(it.id) }
 
+    fun unlockedAllies(): List<Ally> =
+        GameData.ALLIES.filter { totalCaptures >= it.unlockAtCaptures }
+
+    fun hasAlly(id: String): Boolean =
+        GameData.ALLIES.any { it.id == id && totalCaptures >= it.unlockAtCaptures }
+
+    fun nextAlly(): Ally? =
+        GameData.ALLIES.filter { totalCaptures < it.unlockAtCaptures }.minByOrNull { it.unlockAtCaptures }
+
     // ---------- ranks ----------
 
     fun rankData(): Rank = GameData.rankFor(totalCaptures)
