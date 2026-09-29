@@ -126,4 +126,74 @@ class Player(context: Context) {
             GameData.ACHIEVEMENTS.forEach { if (achUnlocked(it.id)) put(it.id) }
         })
     }
+
+    // ---------- save import ----------
+    // O arquivo vem do usuario: toda entrada e tratada como nao confiavel.
+    // Devolve null em caso de sucesso, ou a mensagem de erro.
+
+    fun restoreJson(json: JSONObject): String? {
+        val lastIndex = GameData.SCENARIOS.size - 1
+        val newMoney = json.optInt("money", 0).coerceIn(0, MAX_VALUE)
+        val newCaptures = json.optInt("total_captures", 0).coerceIn(0, MAX_VALUE)
+        val newSpent = json.optInt("total_spent", 0).coerceIn(0, MAX_VALUE)
+
+        val capArray = json.optJSONArray("captures")
+        val newCaps = IntArray(GameData.SCENARIOS.size) { i ->
+            capArray?.optInt(i, 0)?.coerceIn(0, MAX_CAPTURES) ?: 0
+        }
+        val highest = newCaps.indexOfLast { it > 0 }
+        val newUnlocked = json.optInt("max_unlocked", 0)
+            .coerceIn(0, lastIndex)
+            .coerceAtLeast(highest)
+
+        val equipLevels = HashMap<String, Int>()
+        json.optJSONArray("equip")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = obj.keys().asSequence().firstOrNull() ?: continue
+                val e = GameData.equipById(id) ?: continue
+                equipLevels[e.id] = obj.optInt(id, 0).coerceIn(1, MAX_EQUIP_LEVEL)
+            }
+        }
+
+        val itemCounts = HashMap<String, Int>()
+        json.optJSONArray("items")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val obj = arr.optJSONObject(i) ?: continue
+                val id = obj.keys().asSequence().firstOrNull() ?: continue
+                val c = GameData.CONSUMABLES.firstOrNull { it.id == id } ?: continue
+                val n = obj.optInt(id, 0).coerceIn(0, MAX_VALUE)
+                if (n > 0) itemCounts[c.id] = n
+            }
+        }
+
+        val achIds = HashSet<String>()
+        json.optJSONArray("achievements")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val id = arr.optString(i, "")
+                if (GameData.achievementById(id) != null) achIds.add(id)
+            }
+        }
+
+        prefs.edit().apply {
+            clear()
+            putInt("money", newMoney)
+            putInt("max_unlocked", newUnlocked)
+            putInt("total_captures", newCaptures.coerceAtLeast(newCaps.sum()))
+            putInt("total_spent", newSpent)
+            equipLevels.forEach { (id, level) -> putInt("lv_$id", level) }
+            itemCounts.forEach { (id, n) -> putInt("itm_$id", n) }
+            newCaps.forEachIndexed { index, n -> putInt("cap_$index", n) }
+            achIds.forEach { putBoolean("ach_$it", true) }
+        }.apply()
+
+        if (GameData.EQUIP.none { owns(it.id) }) grantStarterKit()
+        return null
+    }
+
+    private companion object {
+        const val MAX_VALUE = 10_000_000
+        const val MAX_CAPTURES = 9_999
+        const val MAX_EQUIP_LEVEL = 3
+    }
 }

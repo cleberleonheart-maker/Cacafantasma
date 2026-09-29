@@ -3,6 +3,7 @@ package com.caca.fantasma.ui
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
+import android.net.Uri
 import android.os.Bundle
 import android.text.InputType
 import android.view.Gravity
@@ -14,6 +15,7 @@ import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -32,6 +34,7 @@ import com.caca.fantasma.game.SoundManager
 import com.caca.fantasma.game.UpdateChecker
 import com.caca.fantasma.game.UpdateInfo
 import com.caca.fantasma.game.UpdateResult
+import org.json.JSONObject
 import java.io.File
 import kotlin.random.Random
 
@@ -60,6 +63,14 @@ class MainActivity : AppCompatActivity() {
 
     private var combatEquip: Equip? = null
     private var combatTiming = ""
+
+    private val exportSave = registerForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
+        uri?.let(::writeSaveTo)
+    }
+
+    private val importSave = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        uri?.let(::readSaveFrom)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -95,6 +106,7 @@ class MainActivity : AppCompatActivity() {
             "hunt" -> renderHunt()
             "trophies" -> renderTrophies()
             "achievements" -> renderAchievements()
+            "settings" -> renderSettings()
             "ending" -> renderEnding()
             "login" -> renderLogin()
             "register" -> renderRegister()
@@ -120,6 +132,90 @@ class MainActivity : AppCompatActivity() {
     private fun starterKitDesc(): String {
         val equip = GameData.equipById(GameData.STARTER_EQUIP)?.name ?: "um equipamento"
         return "R\$${GameData.STARTER_MONEY} e uma $equip"
+    }
+
+    // ---------- settings / save backup ----------
+
+    private fun renderSettings() {
+        header(back = true)
+        spacer(4)
+        column.addView(Label("Configurações", 20, R.color.text_primary, fontDisplay()))
+        spacer(4)
+        pill("Caça Fantasma versão ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})", R.color.accent)
+        spacer(12)
+
+        column.addView(Label("Salvar progresso", 18, R.color.accent, fontDisplay()))
+        column.addView(Label("Gera um arquivo .json com todo o seu progresso: dinheiro, equipamento, consumíveis, capturas e conquistas. Guarde o arquivo no Google Drive ou em qualquer outro lugar — ele serve para restaurar em outro celular.", 13, R.color.text_secondary, fontBody()))
+        spacer(2)
+        addButton(ghostButton("Salvar em arquivo") { exportSave.launch(defaultSaveName()) }, 8)
+
+        spacer(16)
+        column.addView(Label("Restaurar progresso", 18, R.color.accent, fontDisplay()))
+        column.addView(Label("Substitui o progresso atual pelo conteúdo de um arquivo .json salvo antes. A conta e a senha não são alteradas.", 13, R.color.text_secondary, fontBody()))
+        spacer(2)
+        addButton(ghostButton("Restaurar de arquivo") {
+            if (player.totalCaptures == 0 && player.money <= GameData.STARTER_MONEY) {
+                importSave.launch(arrayOf("application/json", "text/plain", "*/*"))
+            } else {
+                AlertDialog.Builder(this)
+                    .setTitle("Restaurar progresso?")
+                    .setMessage("Todo o progresso atual (${player.totalCaptures} fantasmas, R\$${player.money}, equipamento e conquistas) será substituído pelo do arquivo. Não dá para desfazer.")
+                    .setPositiveButton("Escolher arquivo") { _, _ -> importSave.launch(arrayOf("application/json", "text/plain", "*/*")) }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+        }, 8)
+
+        spacer(20)
+        column.addView(Label("Sobre", 18, R.color.accent, fontDisplay()))
+        spacer(2)
+        addButton(ghostButton("Como jogar") { showScreen("help") }, 8)
+        addButton(ghostButton("Verificar atualizações") { checkForUpdates() }, 8)
+
+        spacer(20)
+        addButton(ghostButton("← Voltar") { showScreen("menu") })
+    }
+
+    private fun defaultSaveName(): String {
+        val who = auth.username().ifBlank { "cacador" }.replace(Regex("[^A-Za-z0-9-]"), "-")
+        return "caca-fantasma-$who-v${BuildConfig.VERSION_NAME}.json"
+    }
+
+    private fun writeSaveTo(uri: Uri) {
+        try {
+            contentResolver.openOutputStream(uri, "wt")?.use { out ->
+                out.write(player.backupJson().toString(2).toByteArray())
+            } ?: return Toast.makeText(this, "Não foi possível abrir o arquivo", Toast.LENGTH_LONG).show()
+            snd.unlock()
+            Toast.makeText(this, "Progresso salvo em $uri", Toast.LENGTH_LONG).show()
+        } catch (e: Exception) {
+            Toast.makeText(this, "Falha ao salvar: ${e.message}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun readSaveFrom(uri: Uri) {
+        val raw = try {
+            contentResolver.openInputStream(uri)?.use { it.readBytes().toString(Charsets.UTF_8) }
+        } catch (e: Exception) {
+            null
+        } ?: return Toast.makeText(this, "Não foi possível ler o arquivo", Toast.LENGTH_LONG).show()
+
+        val error = try {
+            player.restoreJson(JSONObject(raw))
+        } catch (e: Exception) {
+            "o arquivo não parece um save válido do Caça Fantasma"
+        }
+        if (error != null) {
+            AlertDialog.Builder(this)
+                .setTitle("Arquivo inválido")
+                .setMessage("Não foi possível restaurar: $error.")
+                .setPositiveButton("Fechar", null)
+                .show()
+            return
+        }
+        snd.unlock()
+        Toast.makeText(this, "Progresso restaurado!", Toast.LENGTH_LONG).show()
+        showScreen("menu")
     }
 
     // ---------- updates ----------
@@ -460,8 +556,7 @@ class MainActivity : AppCompatActivity() {
         if (player.bossCaptured()) {
             addButton(ghostButton("✦ Final da caçada") { showScreen("ending") }, 10)
         }
-        addButton(ghostButton("Como jogar") { showScreen("help") }, 10)
-        addButton(ghostButton("Verificar atualizações") { checkForUpdates() }, 10)
+        addButton(ghostButton("Configurações") { showScreen("settings") }, 10)
         addButton(ghostButton("Sair da conta") { showScreen("login") }, 10)
         addButton(ghostButton("Zerar progresso") {
             AlertDialog.Builder(this)
