@@ -1015,28 +1015,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun needEvidence(sc: Scenario): Int = when (sc.diff) {
-        1, 2 -> 1
-        3, 4 -> 2
-        5, 6 -> 3
-        7, 8 -> 4
-        else -> 5
-    }
-
-    private fun catchChance(sc: Scenario, e: Equip, timing: String): Float {
-        val lv = player.levelOf(e.id)
-        var c = GameData.baseChance(sc.diff)
-        c += GameData.evidenceBonus(effectiveEvidence(), needEvidence(sc))
-        c += GameData.equipBonus(e.id)
-        c += GameData.LEVEL_STEP * (lv - 1)
-        if (huntHp < 40) c -= GameData.COWARD_PENALTY
-        c += when (timing) {
-            "frente" -> GameData.TIMING_FRONT
-            "ritual" -> GameData.TIMING_RITUAL
-            else -> GameData.TIMING_BONUS
-        }
-        return c.coerceIn(GameData.CHANCE_FLOOR, GameData.CHANCE_CAP)
-    }
+    private fun catchChance(sc: Scenario, e: Equip, timing: String): Float =
+        GameData.catchChance(
+            diff = sc.diff,
+            evidence = effectiveEvidence(),
+            equipId = e.id,
+            equipLevel = player.levelOf(e.id),
+            courage = huntHp,
+            timing = timing
+        )
 
     private fun renderConfront(sc: Scenario) {
         val eff = effectiveEvidence()
@@ -1046,7 +1033,7 @@ class MainActivity : AppCompatActivity() {
         addHpBar("Coragem: $huntHp/100", huntHp, 100, if (huntHp > 40) R.color.success else R.color.danger)
         spacer(2)
         val p = panel()
-        p.addView(Label("Evidências reunidas: $eff de ${sc.rounds.size}  (recomendado: ${needEvidence(sc)})", 16, R.color.glow, fontMedium()))
+        p.addView(Label("Evidências reunidas: $eff de ${sc.rounds.size}  (recomendado: ${GameData.needEvidence(sc.diff)})", 16, R.color.glow, fontMedium()))
         if (huntAura > 0) p.addView(Label("Incluindo $huntAura do Incenso de Aura.", 13, R.color.text_muted, fontBody()), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(2) })
         p.addView(Label("Escolha o equipamento do confronto final.", 14, R.color.text_secondary, fontBody()), LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(4) })
         addPanel(p)

@@ -253,6 +253,7 @@ object GameData {
     const val TIMING_FRONT = 0.15f
     const val TIMING_RITUAL = -0.10f
     const val COWARD_PENALTY = 0.10f
+    const val COWARD_THRESHOLD = 40
     const val LEVEL_STEP = 0.05f
     const val CHANCE_FLOOR = 0.05f
     const val CHANCE_CAP = 0.95f
@@ -266,6 +267,43 @@ object GameData {
         "salt" -> 0.10f
         "cross" -> 0.05f
         else -> 0f
+    }
+
+    fun timingBonus(timing: String): Float = when (timing) {
+        "frente" -> TIMING_FRONT
+        "ritual" -> TIMING_RITUAL
+        else -> TIMING_BONUS
+    }
+
+    // Quantas evidências o confronto espera. Escala com diff, não com
+    // rounds.size: o chefe tem 6 rodadas e diff 9, e precisa exigir mais
+    // do que a Casa Abandonada, senão vira o cenário mais fácil.
+    fun needEvidence(diff: Int): Int = when (diff) {
+        1, 2 -> 1
+        3, 4 -> 2
+        5, 6 -> 3
+        7, 8 -> 4
+        else -> 5
+    }
+
+    // Fórmula única da chance de captura. Todo o balanceamento de
+    // dificuldade vive aqui: mexer em DIFF_BASE_STEP ou EVIDENCE_STEP muda
+    // o jogo inteiro, e nenhum outro lugar precisa saber a regra.
+    fun catchChance(
+        diff: Int,
+        evidence: Int,
+        equipId: String,
+        equipLevel: Int,
+        courage: Int,
+        timing: String
+    ): Float {
+        var c = baseChance(diff)
+        c += evidenceBonus(evidence, needEvidence(diff))
+        c += equipBonus(equipId)
+        c += LEVEL_STEP * (equipLevel - 1).coerceAtLeast(0)
+        if (courage < COWARD_THRESHOLD) c -= COWARD_PENALTY
+        c += timingBonus(timing)
+        return c.coerceIn(CHANCE_FLOOR, CHANCE_CAP)
     }
 
     const val ENDING_TITLE = "CAÇADA CONCLUÍDA"

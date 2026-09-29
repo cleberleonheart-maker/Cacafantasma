@@ -25,13 +25,16 @@ equipamento bom os dois davam 95%.
 
 **Resolvido em `b9b5794`.** `diff` agora modula a chance base, cada
 evidência acima do necessário soma 7 pontos e abaixo desconta, e
-`needEvidence` (`MainActivity.kt:1018`) escala por diff. Curva medida:
-95% no primeiro cenário até 68% no chefe, monotônica. No chefe, cada
-evidência a mais rende ~7 pontos (0 evidência = 26%, 6 = 68%).
+`GameData.needEvidence` escala por diff, não por `rounds.size`. Curva
+medida: 95% no primeiro cenário até 68% no chefe, monotônica. No chefe,
+cada evidência a mais rende ~7 pontos (0 evidência = 26%, 6 = 68%).
 
-Os parâmetros estão como constantes em `GameData`
-(`DIFF_BASE_CHANCE`, `DIFF_BASE_STEP`, `EVIDENCE_STEP`, `CHANCE_CAP`...) —
-ajustar o balanceamento é mexer lá, não em `catchChance`.
+**A fórmula inteira está em `GameData.catchChance`** — um só ponto, com os
+parâmetros como constantes ao lado (`DIFF_BASE_STEP`, `EVIDENCE_STEP`,
+`CHANCE_CAP`...). `MainActivity.catchChance` é só um wrapper que passa
+`sc.diff`, a evidência efetiva, o equipamento, o nível e a coragem. É
+por ali que se ajusta balanceamento; a Ideia 4 vira somar um `when` nessa
+função.
 
 ## Ideia 1 — Investigações roteirizadas (agora o maior ganho de design)
 
@@ -70,10 +73,9 @@ curto prazo diferente de "capturar tudo".
 
 Peça extra que só funciona em condição específica (aumenta a chance se a
 coragem estiver abaixo de X, se o confronto for o primeiro round, se o
-fantasma for do tipo tal). Reaproveita o `catchChance` como ponto único
-de extensão — que agora está de fato com a fórmula inteira
-(`GameData.baseChance` + `evidenceBonus` + `equipBonus`), então somar uma
-condição é mexer em um lugar só.
+fantasma for do tipo tal). Reaproveita `GameData.catchChance` como ponto
+único de extensão — a fórmula inteira já está lá, então é somar um `when`
+e pronto.
 
 ## Ideia 5 — Modo Caça Cega
 
