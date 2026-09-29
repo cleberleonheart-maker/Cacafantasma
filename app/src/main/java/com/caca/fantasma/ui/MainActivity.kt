@@ -1,5 +1,6 @@
 package com.caca.fantasma.ui
 
+import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.os.Bundle
@@ -16,15 +17,22 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import com.caca.fantasma.BuildConfig
 import com.caca.fantasma.R
 import com.caca.fantasma.game.Achievement
 import com.caca.fantasma.game.Auth
 import com.caca.fantasma.game.Consumable
+import com.caca.fantasma.game.DownloadResult
 import com.caca.fantasma.game.Equip
 import com.caca.fantasma.game.GameData
 import com.caca.fantasma.game.Player
 import com.caca.fantasma.game.Scenario
 import com.caca.fantasma.game.SoundManager
+import com.caca.fantasma.game.UpdateChecker
+import com.caca.fantasma.game.UpdateInfo
+import com.caca.fantasma.game.UpdateResult
+import java.io.File
 import kotlin.random.Random
 
 class MainActivity : AppCompatActivity() {
@@ -48,6 +56,7 @@ class MainActivity : AppCompatActivity() {
     private var huntRound = 0
     private var huntPhase = "prep"
     private var huntResult = ""
+    private var beatBossJustNow = false
 
     private var combatEquip: Equip? = null
     private var combatTiming = ""
@@ -86,6 +95,7 @@ class MainActivity : AppCompatActivity() {
             "hunt" -> renderHunt()
             "trophies" -> renderTrophies()
             "achievements" -> renderAchievements()
+            "ending" -> renderEnding()
             "login" -> renderLogin()
             "register" -> renderRegister()
             else -> renderMenu()
@@ -110,6 +120,113 @@ class MainActivity : AppCompatActivity() {
     private fun starterKitDesc(): String {
         val equip = GameData.equipById(GameData.STARTER_EQUIP)?.name ?: "um equipamento"
         return "R\$${GameData.STARTER_MONEY} e uma $equip"
+    }
+
+    // ---------- updates ----------
+
+    private fun checkForUpdates() {
+        val progress = ProgressBar(this).apply {
+            isIndeterminate = true
+            indeterminateTintList = ColorStateList.valueOf(color(R.color.glow))
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Verificando atualizações")
+            .setView(progress)
+            .setNegativeButton("Cancelar", null)
+            .create()
+        dialog.show()
+
+        Thread {
+            val result = UpdateChecker.check(BuildConfig.VERSION_NAME)
+            runOnUiThread {
+                if (dialog.isShowing) dialog.dismiss()
+                when (result) {
+                    is UpdateResult.Available -> showUpdateDialog(result.update)
+                    is UpdateResult.UpToDate -> Toast.makeText(
+                        this,
+                        "Você já está na versão ${BuildConfig.VERSION_NAME}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                    is UpdateResult.Failed -> AlertDialog.Builder(this)
+                        .setTitle("Não foi possível verificar")
+                        .setMessage("${result.reason}.\n\nVerifique a internet e tente de novo.")
+                        .setPositiveButton("Fechar", null)
+                        .setNeutralButton("Tentar de novo") { _, _ -> checkForUpdates() }
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun showUpdateDialog(update: UpdateInfo) {
+        val size = if (update.apkSize > 0) "  ·  ${update.apkSize / 1024 / 1024} MB" else ""
+        val message = buildString {
+            append("Versão ${update.versionName} disponível")
+            append(" (você tem ${BuildConfig.VERSION_NAME}$size).")
+            if (update.notes.isNotBlank()) append("\n\n${update.notes}")
+            append("\n\nO app será baixado e aberto para instalar.")
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Nova versão disponível")
+            .setMessage(message)
+            .setPositiveButton("Atualizar") { _, _ -> downloadUpdate(update) }
+            .setNegativeButton("Agora não", null)
+            .show()
+    }
+
+    private fun downloadUpdate(update: UpdateInfo) {
+        val status = Label("Baixando… 0%", 15, R.color.glow, fontMedium(), center = true)
+        val bar = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
+            max = 100
+            progress = 0
+            progressTintList = ColorStateList.valueOf(color(R.color.glow))
+        }
+        val body = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(18), dp(24), dp(6))
+            addView(status, LinearLayout.LayoutParams(MATCH, WRAP))
+            addView(bar, LinearLayout.LayoutParams(MATCH, WRAP).apply { topMargin = dp(12) })
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Baixando ${update.versionName}")
+            .setView(body)
+            .setCancelable(false)
+            .create()
+        dialog.show()
+
+        Thread {
+            val result = UpdateChecker.download(update, File(cacheDir, "updates")) { percent ->
+                runOnUiThread {
+                    bar.progress = percent
+                    status.text = "Baixando… $percent%"
+                }
+            }
+            runOnUiThread {
+                dialog.dismiss()
+                when (result) {
+                    is DownloadResult.Done -> promptInstall(result.file)
+                    is DownloadResult.Failed -> AlertDialog.Builder(this)
+                        .setTitle("Download falhou")
+                        .setMessage("${result.reason}.")
+                        .setPositiveButton("Tentar de novo") { _, _ -> downloadUpdate(update) }
+                        .setNegativeButton("Cancelar", null)
+                        .show()
+                }
+            }
+        }.start()
+    }
+
+    private fun promptInstall(file: File) {
+        val uri = FileProvider.getUriForFile(this, "${BuildConfig.APPLICATION_ID}.fileprovider", file)
+        val install = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "application/vnd.android.package-archive")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            startActivity(install)
+        } catch (e: Exception) {
+            Toast.makeText(this, "Abra as configurações e permita instalar apps desconhecidos", Toast.LENGTH_LONG).show()
+        }
     }
 
     private fun TextView.style(n: Int, c: Int, f: Typeface) {
@@ -332,12 +449,19 @@ class MainActivity : AppCompatActivity() {
         spacer(12)
         pill("Posto: ${player.rank()}  ·  ${player.totalCaptures} fantasmas presos   ·  R\$${player.money}")
         pill("Bônus de posto: +${(player.rankData().rewardBonus * 100).toInt()}% prêmio  ·  -${player.rankData().shopDiscount}% na loja", R.color.accent)
+        if (player.bossCaptured()) {
+            pill("✦ A caçada foi concluída — o castelo é seu", R.color.gold)
+        }
         spacer(18)
         addButton(glowButton("Cenários de Caçada") { showScreen("scenarios") })
         addButton(ghostButton("Loja de Equipamento") { showScreen("shop") }, 10)
         addButton(ghostButton("Sala de Troféus") { showScreen("trophies") }, 10)
         addButton(ghostButton("Conquistas") { showScreen("achievements") }, 10)
+        if (player.bossCaptured()) {
+            addButton(ghostButton("✦ Final da caçada") { showScreen("ending") }, 10)
+        }
         addButton(ghostButton("Como jogar") { showScreen("help") }, 10)
+        addButton(ghostButton("Verificar atualizações") { checkForUpdates() }, 10)
         addButton(ghostButton("Sair da conta") { showScreen("login") }, 10)
         addButton(ghostButton("Zerar progresso") {
             AlertDialog.Builder(this)
@@ -561,6 +685,7 @@ class MainActivity : AppCompatActivity() {
         huntPhase = "prep"
         combatEquip = null
         combatTiming = ""
+        beatBossJustNow = false
         showScreen("hunt")
     }
 
@@ -845,9 +970,11 @@ class MainActivity : AppCompatActivity() {
             val newEquip = GameData.EQUIP.filter { it.unlockAfter == sc.index && !player.owns(it.id) }
             if (newEquip.isNotEmpty()) msg += "\n\nEquipamento liberado na loja: ${newEquip.joinToString(", ") { it.name }}."
             huntResult = msg
+            beatBossJustNow = sc.isBoss
             checkAchievements(sc, huntEvidence == sc.rounds.size)
         } else {
             val protected = timing != "frente" && (huntShield || e.id == "cross")
+            beatBossJustNow = false
             if (protected) {
                 huntResult = "ESCAPOU — ${sc.defeat}\n\nO Crucifixo/Amuleto te protegeu: você ficou com os achados (+R\$$huntTips)."
                 snd.hurt()
@@ -878,7 +1005,50 @@ class MainActivity : AppCompatActivity() {
         val ok = huntResult.startsWith("VITÓRIA")
         if (!ok) {
             addButton(ghostButton("Tentar de novo") { startHunt(sc.index) })
+        } else if (beatBossJustNow) {
+            addButton(glowButton("Ver o final da caçada") { showScreen("ending") })
         }
+    }
+
+    // ---------- ending ----------
+
+    private fun renderEnding() {
+        header(back = false)
+        spacer(18)
+        column.addView(Label("▓▒░ ✦ ░▒▓", 26, R.color.gold, fontDisplay(), center = true))
+        spacer(2)
+        column.addView(Label(GameData.ENDING_TITLE, 28, R.color.glow, fontDisplay(), center = true))
+        spacer(14)
+
+        val story = panel()
+        story.addView(Label(GameData.ENDING_TEXT, 15, R.color.text_primary, fontBody()))
+        addPanel(story)
+
+        spacer(16)
+        column.addView(Label("SEU LEGADO", 18, R.color.accent, fontDisplay()))
+        spacer(2)
+
+        val stats = panel()
+        panelLine(stats, "Espíritos contidos:  ${GameData.SCENARIOS.size} de ${GameData.SCENARIOS.size}", 15, R.color.gold, mt = 0)
+        panelLine(stats, "Fantasmas presos:  ${player.totalCaptures}")
+        panelLine(stats, "Posto alcançado:  ${player.rank()}")
+        panelLine(stats, "Conquistas:  ${player.achievementsUnlocked()} de ${GameData.ACHIEVEMENTS.size}")
+        panelLine(stats, "Equipamentos:  ${GameData.EQUIP.count { player.owns(it.id) }} de ${GameData.EQUIP.size}")
+        panelLine(stats, "Bolsos:  R\$${player.money}")
+        addPanel(stats, marginTop = 8)
+
+        val pending = GameData.ACHIEVEMENTS.count { !player.achUnlocked(it.id) }
+        if (pending > 0) {
+            pill("Faltam $pending conquistas — continue caçando para completar tudo", R.color.text_muted)
+        } else {
+            pill("Todas as conquistas desbloqueadas. Nada mais resta nesta cidade.", R.color.success)
+        }
+
+        spacer(14)
+        navRow(
+            glowButton("Sala de Troféus") { showScreen("trophies") },
+            ghostButton("Menu") { showScreen("menu") }
+        )
     }
 
     // ---------- achievements engine ----------

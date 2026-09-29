@@ -219,6 +219,15 @@ object GameData {
     const val STARTER_MONEY = 300
     const val STARTER_EQUIP = "uv"
 
+    const val ENDING_TITLE = "CAÇADA CONCLUÍDA"
+
+    const val ENDING_TEXT = "O Senhor das Sombras se desfez, e o castelo respirou " +
+        "pela última vez.\n\n" +
+        "Os nove espíritos estão presos. A cidade acorda sem sussurros na escada, " +
+        "sem risos na enfermaria, sem a sirene do trem fantasma. As noites voltaram " +
+        "a ser apenas noites.\n\n" +
+        "Você não é mais um caçador. Você é O Caçador."
+
     fun rankFor(total: Int): Rank =
         RANKS.lastOrNull { total >= it.min } ?: RANKS.first()
 

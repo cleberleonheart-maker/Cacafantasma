@@ -71,6 +71,11 @@ class Player(context: Context) {
     fun allScenariosCaptured(): Boolean =
         GameData.SCENARIOS.all { capturesOf(it.index) > 0 }
 
+    fun bossCaptured(): Boolean =
+        GameData.SCENARIOS.lastOrNull { it.isBoss }?.let { capturesOf(it.index) > 0 } ?: false
+
+    fun achievementsUnlocked(): Int = GameData.ACHIEVEMENTS.count { achUnlocked(it.id) }
+
     // ---------- ranks ----------
 
     fun rankData(): Rank = GameData.rankFor(totalCaptures)
