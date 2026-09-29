@@ -1,28 +1,50 @@
 # Ideias — Caça Fantasma
 
-Anotado em 29/09/2026, logo após a publicação da v1.3. Referências de linha
-valem para o commit `127e4e1` e devem ser conferidas antes de usar.
+Anotado em 29/09/2026. Atualizado depois do commit `b9b5794` (dificuldade
+real + companheiros). Referências de linha valem para esse commit e devem
+ser conferidas antes de usar.
 
 ## Estado atual
 
 - 9 cenários (8 + chefe), 7 equipamentos de 3 níveis, 3 consumíveis,
-  8 conquistas, 6 postos.
-- `GameData.kt` (238 linhas) guarda todo o conteúdo como listas em um
+  8 conquistas, 6 postos, 2 companheiros.
+- `GameData.kt` (287 linhas) guarda todo o conteúdo como listas em um
   único `object`. Adicionar conteúdo é barato porque é 100% data-driven.
-- `MainActivity.kt` tem 1173 linhas e constrói todas as telas por código,
+- `MainActivity.kt` tem 1225 linhas e constrói todas as telas por código,
   sem XML de layout nem Compose. Telas são strings em `showScreen()`.
 - Progresso vive em SharedPreferences com chaves planas e sem namespace:
   `cap_$index`, `lv_$id`, `itm_$id`, `ach_$id`, `money`, `max_unlocked`.
 
-## Ideia 1 — Investigations roteirizadas (maior ganho de design)
+## Resolvido — dificuldade decorativa (era o maior defeito)
 
-Hoje cada `Round(spot, ideal, hit)` fixa qual equipamento é o certo. Na
-segunda vez que se joga o mesmo cenário a resposta é óbvia, e o único
-aleatório é `Random.nextFloat() < hitChance` (`MainActivity.kt:974`).
+O campo `diff` dos cenários só aparecia nas estrelas e no texto
+"recomendado: N"; não entrava em nenhum cálculo. A dificuldade real vinha
+só de `sc.rounds.size`, o que invertia tudo: o chefe, com 6 rodadas, dava
+*mais* chance de montar evidência que a Casa Abandonada, com 4. Com
+equipamento bom os dois davam 95%.
+
+**Resolvido em `b9b5794`.** `diff` agora modula a chance base, cada
+evidência acima do necessário soma 7 pontos e abaixo desconta, e
+`needEvidence` (`MainActivity.kt:1018`) escala por diff. Curva medida:
+95% no primeiro cenário até 68% no chefe, monotônica. No chefe, cada
+evidência a mais rende ~7 pontos (0 evidência = 26%, 6 = 68%).
+
+Os parâmetros estão como constantes em `GameData`
+(`DIFF_BASE_CHANCE`, `DIFF_BASE_STEP`, `EVIDENCE_STEP`, `CHANCE_CAP`...) —
+ajustar o balanceamento é mexer lá, não em `catchChance`.
+
+## Ideia 1 — Investigações roteirizadas (agora o maior ganho de design)
+
+Cada `Round(spot, ideal, hit)` fixa qual equipamento é o certo. Na segunda
+vez que se joga o mesmo cenário a resposta é óbvia.
 
 **Proposta:** embaralhar a ordem das vistorias e sortear o equipamento
 ideal de cada uma, mantendo o texto do resultado genérico. O `spot` e o
 `hit` já descrevem a pista, então não exige reescrever conteúdo.
+
+**Ganho extra:** com o `diff` agora valendo, sortear o equipamento ideal
+também faz a dificuldade variar entre repetições do mesmo cenário, em vez
+de a chance ser fixa.
 
 **Risco:** muda o balanceamento. Exige re-testar os 9 cenários à mão.
 
@@ -47,9 +69,11 @@ curto prazo diferente de "capturar tudo".
 ## Ideia 4 — Equipamento de runa condicional
 
 Peça extra que só funciona em condição específica (aumenta a chance se a
-courage estiver abaixo de X, se o confronto for o primeiro round, se o
+coragem estiver abaixo de X, se o confronto for o primeiro round, se o
 fantasma for do tipo tal). Reaproveita o `catchChance` como ponto único
-de extensão.
+de extensão — que agora está de fato com a fórmula inteira
+(`GameData.baseChance` + `evidenceBonus` + `equipBonus`), então somar uma
+condição é mexer em um lugar só.
 
 ## Ideia 5 — Modo Caça Cega
 
@@ -59,7 +83,7 @@ completamente a decisão tática.
 
 ## Ideia 6 — Corrigir o custo de pular vistoria
 
-`skipRound` (`MainActivity.kt:948`) custa só 6 de coragem contra 12 de
+`skipRound` (`MainActivity.kt:999`) custa só 6 de coragem contra 12 de
 errar, então pular nunca é a pior opção e a escolha fica óbvia.
 Variar o custo por cenário ou pelo round deixaria a decisão real.
 
@@ -74,9 +98,9 @@ toca 7 sons. Botão de mudo é a mudança mais barata da lista.
 
 O que trava uma campanha paralela hoje:
 
-1. **`maxUnlocked` é um inteiro global** (`Player.kt:38`) e o desbloqueio
-   é sequencial (`index + 1`). Mundo novo com cadeia própria precisa de
-   um contador por mundo.
+1. **`maxUnlocked` é um inteiro global** (`Player.kt:16`) e o desbloqueio
+   é sequencial (`Player.kt:43`, `index + 1`). Mundo novo com cadeia própria
+   precisa de um contador por mundo.
 2. **Chaves de SharedPreferences sem namespace.** Dois mundos com ids
    repetidos sobrescrevem um ao outro — e `uv` se repetiria em qualquer
    mundo novo. Precisa virar `cap_<mundo>_<index>`.
@@ -84,6 +108,10 @@ O que trava uma campanha paralela hoje:
    (`Player.kt:74`), `allScenariosCaptured()` (`Player.kt:71`) e a
    conquista "Colecionador" pressupõem um único chefe e uma conclusão
    única.
+4. **Os companheiros destravam por `totalCaptures` global**
+   (`Player.kt:20`), um contador solto. Num mundo paralelo, um jogador com
+   8 capturas no mundo A levaria Baltazar de graça no mundo B. Mesmo
+   namespacing da ideia 2.
 
 **Recomendação:** refatorar o que é genérico de mundo *antes* de
 adicionar conteúdo — namespacing das chaves, um conceito de
@@ -114,4 +142,13 @@ cenários, mais equipamentos). Praticamente de graça.
   salvar → zerar → restaurar.
 - **4 warnings pré-existentes** em `MainActivity.kt`: parâmetro `sc`
   não usado, `toUpperCase()` depreciado, variáveis `eff` e `prePost`
-  não usadas.
+  não usadas. Nenhum vem das mudanças de dificuldade/companheiros.
+- **Curva de dificuldade nunca foi testada jogando.** Os números de
+  `b9b5794` vêm de simulação em Python com as mesmas constantes do
+  código, não de jogo real. Se algum cenário ficar trivial ou
+  impossível na prática, mexer em `DIFF_BASE_STEP` / `EVIDENCE_STEP` em
+  `GameData`.
+- **O Gradle às vezes reporta duração absurda** (já saiu "6h 44m" numa
+  build que terminou em 1 min com a máquina up há 3 h). Se o número não
+  fizer sentido, conferir o mtime do APK em
+  `app/build/outputs/apk/` em vez de acreditar no console.
